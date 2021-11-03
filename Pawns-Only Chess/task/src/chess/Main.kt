@@ -26,17 +26,19 @@ fun main() {
             else {
                 game.makeTurn(move)
                 game.board.print()
+                game.checkWinConditions()
             }
         }
-    } while (input != "exit")
+    } while (input != "exit" && !game.isFinished)
 }
 
-class Game(val board: Board, val whitePlayer: String, val blackPlayer: String, ) {
+class Game(val board: Board, private val whitePlayer: String, private val blackPlayer: String) {
     var side: String = "white"  // or black
     val currentPlayer: String
         get() = if (side == "white") whitePlayer else blackPlayer
-    var canEnPassant = false
-    var enPassantFileIndex = 0
+    private var canEnPassant = false
+    private var enPassantFileIndex = 0
+    var isFinished = false
 
     fun parseInputOrNull(input: String): Move? {
         return if (input.matches("[a-h][1-8][a-h][1-8]".toRegex())) {
@@ -72,19 +74,19 @@ class Game(val board: Board, val whitePlayer: String, val blackPlayer: String, )
         return square == 'W' && side == "white" || square == 'B' && side == "black"
     }
 
-    fun isOpponentPawnAt(to: Position): Boolean {
+    private fun isOpponentPawnAt(to: Position): Boolean {
         val square = board.getSquare(to)
 
         return square == 'B' && side == "white" || square == 'W' && side == "black"
     }
 
-    fun isFreeAt(to: Position): Boolean {
+    private fun isFreeAt(to: Position): Boolean {
         val square = board.getSquare(to)
 
         return square == ' '
     }
 
-    fun isEnPassant(to: Position): Boolean {
+    private fun isEnPassant(to: Position): Boolean {
         return canEnPassant && to.fileIndex == enPassantFileIndex &&
                 to.rankIndex == if (side == "white") 5 else 2
     }
@@ -107,6 +109,45 @@ class Game(val board: Board, val whitePlayer: String, val blackPlayer: String, )
         }
 
         side = if (side == "white") "black" else "white"    // switch sides
+    }
+
+    fun checkWinConditions() {
+        if (board.isPawnInRank(7, 'W') || !board.hasAny('B')) {
+            println("White Wins!")
+            isFinished = true
+        }
+        if (board.isPawnInRank(0, 'B') || !board.hasAny('W')) {
+            println("Black Wins!")
+            isFinished = true
+        }
+
+        if (!isFinished) {
+            val dir = if (side == "white") 1 else -1
+            var thisSideCanMove = false
+            outer@for (rankIndex in 0..7) {
+                for (fileIndex in 0..7) {
+                    val from = Position(fileIndex, rankIndex)
+                    if (isPawnAt(from)) {
+                        val toStraitForward = Position(fileIndex, rankIndex + dir)
+                        if (validMove(Move(from, toStraitForward))) thisSideCanMove = true
+
+                        val toLeftFW = Position(fileIndex - 1, rankIndex + dir)
+                        if (validMove(Move(from, toLeftFW))) thisSideCanMove = true
+
+                        val toRightFW = Position(fileIndex + 1, rankIndex + dir)
+                        if (validMove(Move(from, toRightFW))) thisSideCanMove = true
+
+                        if (thisSideCanMove) break@outer
+                    }
+                }
+            }
+            if (!thisSideCanMove) {
+                println("Stalemate!")
+                isFinished = true
+            }
+        }
+
+        if (isFinished) println("Bye!")
     }
 }
 
@@ -138,13 +179,32 @@ class Board {
 
         Rank.printFooter()
     }
+
+    fun isPawnInRank(rankIndex: Int, c: Char): Boolean {
+        val rank = ranks[rankIndex]
+
+        for (fileIndex in 0..7)
+            if (rank.files[fileIndex] == c)
+                return true
+
+        return false
+    }
+
+    fun hasAny(c: Char): Boolean {
+
+        for (rankIndex in 0..7)
+            if (isPawnInRank(rankIndex, c))
+                return true
+
+        return false
+    }
 }
 
-class Rank(private val rank: Int, fill: Char) {
+class Rank(private val rankNumber: Int, fill: Char) {
     val files = MutableList(8) { fill }
 
     fun printFiles() {
-        print("$rank ")
+        print("$rankNumber ")
         for (fileIndex in 0..7)
             print("| ${files[fileIndex]} ")
             println("|")
@@ -156,9 +216,12 @@ class Rank(private val rank: Int, fill: Char) {
     }
 }
 
-class Move(s4: String) {
-    val from = Position(s4.take(2))
-    val to = Position(s4.takeLast(2))
+class Move(val from: Position, val to: Position) {
+
+    constructor(s4: String) : this(
+        Position(s4.take(2)),
+        Position(s4.takeLast(2))
+    )
 }
 
 class Position(val fileIndex: Int, val rankIndex: Int) {
